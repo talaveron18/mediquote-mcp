@@ -1,22 +1,16 @@
-import { timingSafeEqual } from 'node:crypto';
-import { getEnv } from './env.js';
-
-function safeEqual(left: string, right: string): boolean {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-export function isAuthorized(request: Request): boolean {
-  const expected = getEnv('MCP_ACCESS_TOKEN')?.trim();
-  if (!expected) return false;
+export function bearerToken(request: Request): string | null {
   const match = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i);
-  return Boolean(match?.[1] && safeEqual(match[1], expected));
+  const token = match?.[1]?.trim() ?? '';
+  return token.startsWith('mqai_') && token.length >= 30 ? token : null;
 }
 
-export function unauthorized(): Response {
-  return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+export function unauthorized(message = 'Unauthorized'): Response {
+  return new Response(JSON.stringify({ error: message }), {
     status: 401,
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+      'www-authenticate': 'Bearer realm="mediquote-mcp"',
+    },
   });
 }
