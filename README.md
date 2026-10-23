@@ -1,35 +1,67 @@
 # MediQuote MCP / GASI AI Gateway
 
-Capa neutral para conectar MediQuote/GASI con asistentes de IA sin acoplar el programa a un proveedor concreto.
+Capa neutral para conectar MediQuote/GASI con asistentes de IA sin acoplar el programa a un proveedor concreto ni compartir una cuenta de IA entre usuarios.
+
+## Modelo
+
+Cada persona usa **su propia IA** (ChatGPT, Claude, Grok u otro cliente compatible) y genera desde MediQuote una conexión personal `mqai_...`.
+
+La llave identifica al usuario de MediQuote. El gateway valida esa llave contra `/api/v1/me`, obtiene el rol y las capacidades del usuario y publica únicamente las herramientas permitidas para esa persona.
+
+GASI no presta una cuenta común de ChatGPT/Claude/Grok y el gateway no guarda contraseñas, cookies ni claves API de esos proveedores.
 
 ## Interfaces
 
 - `POST /mcp` — MCP remoto estándar.
-- `GET /bridge/tools` — herramientas en JSON Schema para clientes sin MCP.
-- `POST /bridge/call` — ejecución neutral `{ "name": "...", "arguments": {...} }`.
+- `GET /bridge/tools` — manifiesto JSON Schema filtrado por usuario para clientes sin MCP.
+- `POST /bridge/call` — ejecución neutral `{ "name": "...", "arguments": {...} }`, también filtrada por usuario.
 - `GET /health` — estado del servicio.
 
 ## Herramientas
 
+El registro contiene actualmente:
+
 `listar_clientes`, `obtener_cliente`, `crear_cliente`, `listar_atribuciones`, `obtener_atribucion`, `crear_atribucion`, `cambiar_estado_atribucion`, `prorrogar_atribucion`, `cerrar_atribucion`, `vencimientos_proximos`, `listar_presupuestos`, `obtener_presupuesto`, `listar_comerciales`.
 
-Las herramientas de presupuestos son de solo lectura y no devuelven costes internos, márgenes internos ni notas internas.
+No todos los usuarios ven todas las herramientas. Por ejemplo, un comercial no recibe `crear_cliente` ni `prorrogar_atribucion`; MediQuote además limita sus atribuciones y presupuestos a los que le corresponden.
 
 ## Seguridad
 
-El gateway no accede a la base de datos. Llama a `MEDIQUOTE_API_URL` con `MEDIQUOTE_API_TOKEN`. Los clientes de IA entran al gateway con otro secreto distinto, `MCP_ACCESS_TOKEN`. Ningún secreto va al repositorio.
+- El gateway **no accede a la base de datos**.
+- No existe una credencial maestra del gateway capaz de actuar como cualquier usuario.
+- El cliente envía `Authorization: Bearer mqai_...`.
+- La misma credencial personal se reenvía a MediQuote, que resuelve el usuario real y aplica permisos en servidor.
+- MediQuote guarda únicamente SHA-256 de cada llave y la puede revocar individualmente.
+- Las acciones quedan auditadas con usuario, conexión, proveedor e IP.
+- Las herramientas mutantes siguen sometidas a las reglas de negocio de MediQuote. `cerrar_atribucion`, además, exige confirmación explícita en la llamada.
 
-## Variables
+## Variable del servidor
+
+El gateway solo necesita conocer la API de MediQuote:
 
 ```text
 MEDIQUOTE_API_URL=https://gasi-mediquote.netlify.app/api/v1
-MEDIQUOTE_API_TOKEN=...
-MCP_ACCESS_TOKEN=...
 ```
 
-## Compatibilidad
+No se configuran `MCP_ACCESS_TOKEN` ni `MEDIQUOTE_API_TOKEN` globales.
 
-MCP es el transporte preferido. El bridge JSON permite adaptadores para proveedores que solo soporten function/tool calling. El workspace `GASI AI` dentro de MediQuote usa la misma filosofía y puede cambiar de proveedor (OpenAI, Claude, Grok, OpenAI-compatible o local) sin reescribir las operaciones de negocio.
+## Conexión de un usuario
+
+1. El usuario inicia sesión en MediQuote.
+2. Abre **Mi IA**.
+3. Elige un proveedor y genera una conexión.
+4. MediQuote muestra una sola vez la llave `mqai_...`.
+5. En su IA añade el MCP remoto `https://mediquote-mcp.netlify.app/mcp` y usa su llave como Bearer.
+6. Si revoca la conexión desde MediQuote, deja de funcionar inmediatamente.
+
+La disponibilidad de conectores MCP depende del proveedor y del plan de cada usuario. Si un proveedor no admite MCP remoto, `/bridge/tools` y `/bridge/call` permiten construir un adaptador sin cambiar MediQuote.
+
+## GASI AI vs Mi IA
+
+- **GASI AI**: workspace corporativo de Dirección dentro de MediQuote, con su propio historial y proveedores configurados por GASI.
+- **Mi IA**: conexión personal para que cada usuario use su propia cuenta de IA con sus propios límites y sus permisos de MediQuote.
+
+Ambos consumen la misma lógica de negocio; son puertas de entrada diferentes.
 
 ## Desarrollo
 
