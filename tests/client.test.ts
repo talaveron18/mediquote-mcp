@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mediquoteRequest, MediQuoteApiError } from '../src/mediquote-client.js';
+import { mediquoteRequest } from '../src/mediquote-client.js';
 
 const originalUrl = process.env.MEDIQUOTE_API_URL;
 const originalToken = process.env.MEDIQUOTE_API_TOKEN;
@@ -27,7 +27,7 @@ describe('MediQuote REST client', () => {
     process.env.MEDIQUOTE_API_URL = 'https://mediquote.test/api/v1';
     process.env.MEDIQUOTE_API_TOKEN = 'api-secret';
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'CIF no disponible', code: 'TAKEN' }), { status: 409 })));
-    await expect(mediquoteRequest('atribucion')).rejects.toMatchObject<MediQuoteApiError>({
+    await expect(mediquoteRequest('atribucion')).rejects.toMatchObject({
       message: 'CIF no disponible', status: 409, code: 'TAKEN',
     });
   });
