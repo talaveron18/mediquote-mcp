@@ -11,7 +11,9 @@ Capa neutral para conectar MediQuote/GASI con asistentes de IA sin acoplar el pr
 
 ## Herramientas
 
-`listar_clientes`, `obtener_cliente`, `crear_cliente`, `listar_atribuciones`, `obtener_atribucion`, `crear_atribucion`, `cambiar_estado_atribucion`, `prorrogar_atribucion`, `cerrar_atribucion`, `vencimientos_proximos`, `listar_comerciales`.
+`listar_clientes`, `obtener_cliente`, `crear_cliente`, `listar_atribuciones`, `obtener_atribucion`, `crear_atribucion`, `cambiar_estado_atribucion`, `prorrogar_atribucion`, `cerrar_atribucion`, `vencimientos_proximos`, `listar_presupuestos`, `obtener_presupuesto`, `listar_comerciales`.
+
+Las herramientas de presupuestos son de solo lectura y no devuelven costes internos, márgenes internos ni notas internas.
 
 ## Seguridad
 
@@ -27,7 +29,7 @@ MCP_ACCESS_TOKEN=...
 
 ## Compatibilidad
 
-MCP es el transporte preferido. El bridge JSON permite adaptadores para proveedores que solo soporten function/tool calling. El futuro workspace `GASI AI` dentro de MediQuote usará la misma capa y podrá cambiar de proveedor (OpenAI, Claude, Grok, OpenAI-compatible o local) sin reescribir las operaciones de negocio.
+MCP es el transporte preferido. El bridge JSON permite adaptadores para proveedores que solo soporten function/tool calling. El workspace `GASI AI` dentro de MediQuote usa la misma filosofía y puede cambiar de proveedor (OpenAI, Claude, Grok, OpenAI-compatible o local) sin reescribir las operaciones de negocio.
 
 ## Desarrollo
 
