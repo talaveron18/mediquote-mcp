@@ -11,15 +11,30 @@ export class MediQuoteApiError extends Error {
   }
 }
 
+export type MediQuoteCapabilities = {
+  readClients: boolean;
+  createClient: boolean;
+  readAttributions: boolean;
+  createAttribution: boolean;
+  changeAttributionStatus: boolean;
+  extendAttribution: boolean;
+  closeAttribution: boolean;
+  readExpirations: boolean;
+  listCommercials: boolean;
+};
+
+export type MediQuoteIdentity = {
+  user: { id: string; email: string; name: string; role: string };
+  connection: { id: string; label: string; provider: string };
+  capabilities: MediQuoteCapabilities;
+};
+
 function baseUrl(): string {
   return requireEnv('MEDIQUOTE_API_URL').replace(/\/+$/, '');
 }
 
-function token(): string {
-  return requireEnv('MEDIQUOTE_API_TOKEN');
-}
-
 export async function mediquoteRequest<T>(
+  token: string,
   path: string,
   init: RequestInit = {},
   query?: Record<string, string | number | undefined>,
@@ -33,7 +48,7 @@ export async function mediquoteRequest<T>(
     ...init,
     headers: {
       accept: 'application/json',
-      authorization: `Bearer ${token()}`,
+      authorization: `Bearer ${token}`,
       ...(init.body ? { 'content-type': 'application/json' } : {}),
       ...(init.headers ?? {}),
     },
@@ -53,4 +68,8 @@ export async function mediquoteRequest<T>(
     throw new MediQuoteApiError(message, response.status, code);
   }
   return payload as T;
+}
+
+export function resolveIdentity(token: string): Promise<MediQuoteIdentity> {
+  return mediquoteRequest<MediQuoteIdentity>(token, 'me');
 }
