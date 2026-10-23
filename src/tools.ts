@@ -15,6 +15,7 @@ function json(method: string, body: unknown): RequestInit {
 
 const estados = z.enum(['prospecting', 'proposal_sent', 'proposal_accepted', 'closed', 'expired', 'released', 'exit_hold']);
 const estadosEditables = z.enum(['prospecting', 'proposal_sent', 'proposal_accepted', 'closed']);
+const estadosPresupuesto = z.enum(['borrador', 'enviado', 'aceptado', 'rechazado', 'caducado']);
 
 const crearClienteSchema = z.object({
   businessName: z.string().min(1).describe('Razón social'),
@@ -127,6 +128,39 @@ export const tools: ToolDefinition[] = [
     execute: async (raw) => {
       const { dias } = z.object({ dias: z.number().int().min(1).max(180).default(15) }).parse(raw);
       return mediquoteRequest('atribucion/vencimientos', {}, { dias });
+    },
+  },
+  {
+    name: 'listar_presupuestos',
+    description: 'Lista presupuestos de MediQuote con filtros opcionales por estado, cliente o texto. Solo lectura y sin costes internos.',
+    inputSchema: z.object({
+      status: estadosPresupuesto.optional(),
+      client: z.string().trim().optional(),
+      search: z.string().trim().optional(),
+      limit: z.number().int().min(1).max(100).default(50),
+    }),
+    execute: async (raw) => {
+      const input = z.object({
+        status: estadosPresupuesto.optional(),
+        client: z.string().trim().optional(),
+        search: z.string().trim().optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      }).parse(raw);
+      return mediquoteRequest('presupuestos', {}, {
+        status: input.status,
+        client: input.client,
+        search: input.search,
+        limit: input.limit,
+      });
+    },
+  },
+  {
+    name: 'obtener_presupuesto',
+    description: 'Obtiene el detalle de un presupuesto por ID, incluidos cliente y bloques de servicio, sin costes internos. Solo lectura.',
+    inputSchema: z.object({ id: z.string().min(1) }),
+    execute: async (raw) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(raw);
+      return mediquoteRequest(`presupuestos/${encodeURIComponent(id)}`);
     },
   },
   {
