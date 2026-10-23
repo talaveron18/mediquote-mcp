@@ -1,11 +1,14 @@
 import * as z from 'zod/v4';
-import { mediquoteRequest } from './mediquote-client.js';
+import { mediquoteRequest, type MediQuoteCapabilities } from './mediquote-client.js';
+
+export type Capability = keyof MediQuoteCapabilities;
 
 export type ToolDefinition = {
   name: string;
   description: string;
+  capability: Capability;
   inputSchema: z.ZodType;
-  execute: (input: unknown) => Promise<unknown>;
+  execute: (token: string, input: unknown) => Promise<unknown>;
   mutating?: boolean;
 };
 
@@ -21,162 +24,140 @@ const crearClienteSchema = z.object({
   businessName: z.string().min(1).describe('Razón social'),
   cif: z.string().min(2).describe('CIF/NIF español'),
   fiscalAddress: z.string().min(1).describe('Domicilio fiscal'),
-  contactPerson: z.string().optional(),
-  email: z.string().optional(),
-  phone: z.string().optional(),
-  sector: z.string().optional(),
-  paymentTerms: z.string().optional(),
-  notes: z.string().optional(),
+  contactPerson: z.string().optional(), email: z.string().optional(), phone: z.string().optional(),
+  sector: z.string().optional(), paymentTerms: z.string().optional(), notes: z.string().optional(),
 });
 
 const crearAtribucionSchema = z.object({
-  cif: z.string().min(2),
-  businessName: z.string().min(1),
-  commercialId: z.string().min(1),
-  service: z.string().min(1),
-  contactPerson: z.string().optional(),
-  contactEmail: z.string().optional(),
-  contactPhone: z.string().optional(),
-  notes: z.string().optional(),
+  cif: z.string().min(2), businessName: z.string().min(1),
+  commercialId: z.string().min(1).optional().describe('Dirección puede indicar un comercial. Si el usuario conectado es comercial, MediQuote usa automáticamente su propio usuario.'),
+  service: z.string().min(1), contactPerson: z.string().optional(), contactEmail: z.string().optional(), contactPhone: z.string().optional(), notes: z.string().optional(),
 });
 
 export const tools: ToolDefinition[] = [
   {
-    name: 'listar_clientes',
-    description: 'Lista los clientes de MediQuote. Puede filtrar por texto en razón social, CIF, contacto o email. Solo lectura.',
-    inputSchema: z.object({ search: z.string().trim().optional().describe('Texto opcional de búsqueda') }),
-    execute: async (raw) => {
+    name: 'listar_clientes', capability: 'readClients',
+    description: 'Lista los clientes de MediQuote. Puede filtrar por razón social, CIF, contacto o email. Solo lectura.',
+    inputSchema: z.object({ search: z.string().trim().optional() }),
+    execute: async (token, raw) => {
       const input = z.object({ search: z.string().trim().optional() }).parse(raw);
-      return mediquoteRequest('clientes', {}, { search: input.search });
+      return mediquoteRequest(token, 'clientes', {}, { search: input.search });
     },
   },
   {
-    name: 'obtener_cliente',
+    name: 'obtener_cliente', capability: 'readClients',
     description: 'Obtiene un cliente concreto por CIF/NIF. Solo lectura.',
-    inputSchema: z.object({ cif: z.string().min(2).describe('CIF/NIF del cliente') }),
-    execute: async (raw) => {
-      const { cif } = z.object({ cif: z.string().min(2) }).parse(raw);
-      return mediquoteRequest(`clientes/${encodeURIComponent(cif)}`);
-    },
-  },
-  {
-    name: 'crear_cliente',
-    description: 'Crea un cliente en MediQuote y aplica las reglas vigentes de sincronización con Atribución Comercial.',
-    mutating: true,
-    inputSchema: crearClienteSchema,
-    execute: async (raw) => mediquoteRequest('clientes', json('POST', crearClienteSchema.parse(raw))),
-  },
-  {
-    name: 'listar_atribuciones',
-    description: 'Lista atribuciones comerciales. Puede filtrar por comercial y estado. Solo lectura.',
-    inputSchema: z.object({ comercial: z.string().optional(), estado: estados.optional() }),
-    execute: async (raw) => {
-      const input = z.object({ comercial: z.string().optional(), estado: estados.optional() }).parse(raw);
-      return mediquoteRequest('atribucion', {}, { comercial: input.comercial, estado: input.estado });
-    },
-  },
-  {
-    name: 'obtener_atribucion',
-    description: 'Obtiene la atribución vigente o más relevante para un CIF. Solo lectura.',
     inputSchema: z.object({ cif: z.string().min(2) }),
-    execute: async (raw) => {
+    execute: async (token, raw) => {
       const { cif } = z.object({ cif: z.string().min(2) }).parse(raw);
-      return mediquoteRequest(`atribucion/${encodeURIComponent(cif)}`);
+      return mediquoteRequest(token, `clientes/${encodeURIComponent(cif)}`);
     },
   },
   {
-    name: 'crear_atribucion',
-    description: 'Registra una atribución comercial respetando disponibilidad, grupos, reservas y reglas de MediQuote.',
-    mutating: true,
-    inputSchema: crearAtribucionSchema,
-    execute: async (raw) => mediquoteRequest('atribucion', json('POST', crearAtribucionSchema.parse(raw))),
+    name: 'crear_cliente', capability: 'createClient',
+    description: 'Crea un cliente. Solo se publica cuando el usuario conectado tiene permiso de Dirección.',
+    mutating: true, inputSchema: crearClienteSchema,
+    execute: async (token, raw) => mediquoteRequest(token, 'clientes', json('POST', crearClienteSchema.parse(raw))),
   },
   {
-    name: 'cambiar_estado_atribucion',
-    description: 'Cambia el estado de una atribución a un estado editable permitido por MediQuote.',
+    name: 'listar_atribuciones', capability: 'readAttributions',
+    description: 'Lista atribuciones comerciales. MediQuote limita automáticamente a un comercial a sus propias atribuciones. Solo lectura.',
+    inputSchema: z.object({ comercial: z.string().optional(), estado: estados.optional() }),
+    execute: async (token, raw) => {
+      const input = z.object({ comercial: z.string().optional(), estado: estados.optional() }).parse(raw);
+      return mediquoteRequest(token, 'atribucion', {}, { comercial: input.comercial, estado: input.estado });
+    },
+  },
+  {
+    name: 'obtener_atribucion', capability: 'readAttributions',
+    description: 'Obtiene la atribución vigente o más relevante de un CIF. Un comercial solo puede obtener las suyas.',
+    inputSchema: z.object({ cif: z.string().min(2) }),
+    execute: async (token, raw) => {
+      const { cif } = z.object({ cif: z.string().min(2) }).parse(raw);
+      return mediquoteRequest(token, `atribucion/${encodeURIComponent(cif)}`);
+    },
+  },
+  {
+    name: 'crear_atribucion', capability: 'createAttribution',
+    description: 'Registra una atribución. Un comercial queda siempre como titular de su propia alta; Dirección puede elegir otro comercial.',
+    mutating: true, inputSchema: crearAtribucionSchema,
+    execute: async (token, raw) => mediquoteRequest(token, 'atribucion', json('POST', crearAtribucionSchema.parse(raw))),
+  },
+  {
+    name: 'cambiar_estado_atribucion', capability: 'changeAttributionStatus',
+    description: 'Cambia el estado de una atribución. Un comercial solo puede modificar las suyas.',
     mutating: true,
     inputSchema: z.object({ cif: z.string().min(2), estado: estadosEditables }),
-    execute: async (raw) => {
+    execute: async (token, raw) => {
       const input = z.object({ cif: z.string().min(2), estado: estadosEditables }).parse(raw);
-      return mediquoteRequest(`atribucion/${encodeURIComponent(input.cif)}/estado`, json('PATCH', { estado: input.estado }));
+      return mediquoteRequest(token, `atribucion/${encodeURIComponent(input.cif)}/estado`, json('PATCH', { estado: input.estado }));
     },
   },
   {
-    name: 'prorrogar_atribucion',
-    description: 'Prorroga manualmente una atribución. El motivo es obligatorio y MediQuote aplica los límites acumulados.',
+    name: 'prorrogar_atribucion', capability: 'extendAttribution',
+    description: 'Prorroga manualmente una atribución. Solo se publica para Dirección. El motivo es obligatorio.',
     mutating: true,
     inputSchema: z.object({ cif: z.string().min(2), dias: z.number().int().min(1).max(60), motivo: z.string().min(3) }),
-    execute: async (raw) => {
+    execute: async (token, raw) => {
       const input = z.object({ cif: z.string().min(2), dias: z.number().int().min(1).max(60), motivo: z.string().min(3) }).parse(raw);
-      return mediquoteRequest(`atribucion/${encodeURIComponent(input.cif)}/prorroga`, json('POST', { dias: input.dias, motivo: input.motivo }));
+      return mediquoteRequest(token, `atribucion/${encodeURIComponent(input.cif)}/prorroga`, json('POST', { dias: input.dias, motivo: input.motivo }));
     },
   },
   {
-    name: 'cerrar_atribucion',
-    description: 'Marca una atribución como cerrada. No sustituye la validación final de Dirección. Requiere confirmación explícita del usuario.',
+    name: 'cerrar_atribucion', capability: 'closeAttribution',
+    description: 'Marca una atribución como cerrada. Un comercial solo puede cerrar las suyas. El cierre sigue requiriendo validación de Dirección y requiere confirmación explícita.',
     mutating: true,
-    inputSchema: z.object({ cif: z.string().min(2), confirmar: z.literal(true).describe('Debe ser true tras confirmación explícita del usuario') }),
-    execute: async (raw) => {
+    inputSchema: z.object({ cif: z.string().min(2), confirmar: z.literal(true) }),
+    execute: async (token, raw) => {
       const input = z.object({ cif: z.string().min(2), confirmar: z.literal(true) }).parse(raw);
-      return mediquoteRequest(`atribucion/${encodeURIComponent(input.cif)}/cerrar`, { method: 'POST' });
+      return mediquoteRequest(token, `atribucion/${encodeURIComponent(input.cif)}/cerrar`, { method: 'POST' });
     },
   },
   {
-    name: 'vencimientos_proximos',
-    description: 'Lista atribuciones activas que vencen en los próximos N días. Solo lectura.',
+    name: 'vencimientos_proximos', capability: 'readExpirations',
+    description: 'Lista atribuciones que vencen en los próximos N días. Para comerciales devuelve solo las propias. Solo lectura.',
     inputSchema: z.object({ dias: z.number().int().min(1).max(180).default(15) }),
-    execute: async (raw) => {
+    execute: async (token, raw) => {
       const { dias } = z.object({ dias: z.number().int().min(1).max(180).default(15) }).parse(raw);
-      return mediquoteRequest('atribucion/vencimientos', {}, { dias });
+      return mediquoteRequest(token, 'atribucion/vencimientos', {}, { dias });
     },
   },
   {
-    name: 'listar_presupuestos',
-    description: 'Lista presupuestos de MediQuote con filtros opcionales por estado, cliente o texto. Solo lectura y sin costes internos.',
-    inputSchema: z.object({
-      status: estadosPresupuesto.optional(),
-      client: z.string().trim().optional(),
-      search: z.string().trim().optional(),
-      limit: z.number().int().min(1).max(100).default(50),
-    }),
-    execute: async (raw) => {
-      const input = z.object({
-        status: estadosPresupuesto.optional(),
-        client: z.string().trim().optional(),
-        search: z.string().trim().optional(),
-        limit: z.number().int().min(1).max(100).default(50),
-      }).parse(raw);
-      return mediquoteRequest('presupuestos', {}, {
-        status: input.status,
-        client: input.client,
-        search: input.search,
-        limit: input.limit,
-      });
+    name: 'listar_presupuestos', capability: 'readBudgets',
+    description: 'Lista presupuestos visibles para el usuario conectado, con filtros opcionales. Solo lectura; MediQuote aplica sus reglas de visibilidad y saneado.',
+    inputSchema: z.object({ status: estadosPresupuesto.optional(), client: z.string().trim().optional(), search: z.string().trim().optional(), limit: z.number().int().min(1).max(100).default(50) }),
+    execute: async (token, raw) => {
+      const input = z.object({ status: estadosPresupuesto.optional(), client: z.string().trim().optional(), search: z.string().trim().optional(), limit: z.number().int().min(1).max(100).default(50) }).parse(raw);
+      return mediquoteRequest(token, 'presupuestos', {}, { status: input.status, client: input.client, search: input.search, limit: input.limit });
     },
   },
   {
-    name: 'obtener_presupuesto',
-    description: 'Obtiene el detalle de un presupuesto por ID, incluidos cliente y bloques de servicio, sin costes internos. Solo lectura.',
+    name: 'obtener_presupuesto', capability: 'readBudgets',
+    description: 'Obtiene el detalle de un presupuesto visible para el usuario conectado. Solo lectura.',
     inputSchema: z.object({ id: z.string().min(1) }),
-    execute: async (raw) => {
+    execute: async (token, raw) => {
       const { id } = z.object({ id: z.string().min(1) }).parse(raw);
-      return mediquoteRequest(`presupuestos/${encodeURIComponent(id)}`);
+      return mediquoteRequest(token, `presupuestos/${encodeURIComponent(id)}`);
     },
   },
   {
-    name: 'listar_comerciales',
-    description: 'Lista comerciales activos de MediQuote con sus identificadores. Solo lectura.',
+    name: 'listar_comerciales', capability: 'listCommercials',
+    description: 'Lista comerciales visibles para el usuario. Un comercial solo recibe su propia identidad. Solo lectura.',
     inputSchema: z.object({}),
-    execute: async () => mediquoteRequest('comerciales'),
+    execute: async (token) => mediquoteRequest(token, 'comerciales'),
   },
 ];
 
-export function toolByName(name: string): ToolDefinition | undefined {
-  return tools.find((tool) => tool.name === name);
+export function toolsForCapabilities(capabilities: MediQuoteCapabilities): ToolDefinition[] {
+  return tools.filter((tool) => capabilities[tool.capability] === true);
 }
 
-export function toolManifest() {
-  return tools.map((tool) => ({
+export function toolByName(name: string, capabilities: MediQuoteCapabilities): ToolDefinition | undefined {
+  return toolsForCapabilities(capabilities).find((tool) => tool.name === name);
+}
+
+export function toolManifest(capabilities: MediQuoteCapabilities) {
+  return toolsForCapabilities(capabilities).map((tool) => ({
     name: tool.name,
     description: tool.description,
     mutating: Boolean(tool.mutating),
