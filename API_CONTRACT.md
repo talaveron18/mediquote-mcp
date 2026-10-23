@@ -14,7 +14,11 @@ Todas las rutas requieren `Authorization: Bearer <MEDIQUOTE_API_TOKEN>` y `Accep
 - `POST /atribucion/{cif}/prorroga`
 - `POST /atribucion/{cif}/cerrar`
 - `GET /atribucion/vencimientos?dias=N`
+- `GET /presupuestos?status=X&client=Y&search=Z&limit=N`
+- `GET /presupuestos/{id}`
 - `GET /comerciales`
+
+Las rutas de presupuestos son de solo lectura y no deben exponer costes internos, márgenes internos ni notas internas.
 
 La lógica de disponibilidad, CIF, reservas, grupos, prórrogas, cierre, privacidad y auditoría pertenece exclusivamente a MediQuote. El gateway no debe duplicarla ni acceder directamente a la base de datos.
 
