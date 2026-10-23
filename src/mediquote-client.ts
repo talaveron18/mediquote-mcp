@@ -20,6 +20,7 @@ export type MediQuoteCapabilities = {
   extendAttribution: boolean;
   closeAttribution: boolean;
   readExpirations: boolean;
+  readBudgets: boolean;
   listCommercials: boolean;
 };
 
